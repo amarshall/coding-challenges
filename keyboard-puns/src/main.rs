@@ -33,9 +33,7 @@ static QWERTY_TO_DVORAK: [u8; 123] = [
 fn read_words<T>(handle: T) -> Vec<String> where T: BufRead {
   let mut words: Vec<String> = Vec::with_capacity(1_000_000);
   for line in handle.lines() {
-    let mut word = line.unwrap();
-    word.make_ascii_lowercase();
-    words.push(word);
+    words.push(line.unwrap());
   };
   words
 }
@@ -51,7 +49,7 @@ fn transform(word: &[u8]) -> Vec<u8> {
 
 fn valid_convert_from_qwerty(word: &[u8]) -> bool {
   for chr in word {
-    if QWERTY_TO_DVORAK[*chr as usize] == 0 {
+    if QWERTY_TO_DVORAK[chr.to_ascii_lowercase() as usize] == 0 {
       return false;
     }
   }
@@ -60,7 +58,8 @@ fn valid_convert_from_qwerty(word: &[u8]) -> bool {
 
 fn valid_convert_from_dvorak(word: &[u8]) -> bool {
   for chr in word {
-    if *chr == b's' || *chr == b'v' || *chr == b'w' || *chr == b'z' {
+    let c = chr.to_ascii_lowercase();
+    if c == b's' || c == b'v' || c == b'w' || c == b'z' {
       return false;
     }
   }
