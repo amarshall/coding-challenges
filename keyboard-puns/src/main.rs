@@ -34,7 +34,9 @@ fn read_words() -> Vec<String> {
   let stdin = io::stdin();
   let mut words: Vec<String> = Vec::with_capacity(1_000_000);
   for line in stdin.lock().lines() {
-    words.push(line.unwrap().to_ascii_lowercase());
+    let mut word = line.unwrap();
+    word.make_ascii_lowercase();
+    words.push(word);
   };
   words
 }
