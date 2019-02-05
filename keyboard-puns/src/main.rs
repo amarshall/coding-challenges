@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::io;
 use std::io::prelude::*;
+use std::io::Write;
 use std::str;
 use std::sync::mpsc;
 use std::thread;
@@ -91,9 +92,13 @@ fn main() {
   let (spool_tx, spool_rx) = mpsc::channel::<String>();
 
   let printer = thread::spawn(move || {
+    let stdout = io::stdout();
+    let mut handle = stdout.lock();
     loop {
-      match spool_rx.recv() {
-        Ok(s) => println!("{}", s),
+      let res = spool_rx.recv().or(Err(()))
+        .and_then(|s| writeln!(handle, "{}", s).or(Err(())));
+      match res {
+        Ok(_) => (),
         Err(_) => break,
       };
     };
