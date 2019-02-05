@@ -30,10 +30,9 @@ static QWERTY_TO_DVORAK: [u8; 123] = [
 ];
 
 
-fn read_words() -> Vec<String> {
-  let stdin = io::stdin();
+fn read_words<T>(handle: T) -> Vec<String> where T: BufRead {
   let mut words: Vec<String> = Vec::with_capacity(1_000_000);
-  for line in stdin.lock().lines() {
+  for line in handle.lines() {
     let mut word = line.unwrap();
     word.make_ascii_lowercase();
     words.push(word);
@@ -69,7 +68,7 @@ fn valid_convert_from_dvorak(word: &[u8]) -> bool {
 }
 
 fn run(spool: mpsc::Sender<String>) {
-  let words = read_words();
+  let words = read_words(io::stdin().lock());
   let qwerty_words = words.iter()
     .map(|word| word.as_bytes())
     .filter(|word| valid_convert_from_qwerty(word));
