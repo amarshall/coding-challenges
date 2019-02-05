@@ -1,0 +1,7 @@
+[package]
+name = "keyboard-puns"
+version = "0.1.0"
+authors = ["Andrew Marshall <andrew@johnandrewmarshall.com>"]
+edition = "2018"
+
+[dependencies]
