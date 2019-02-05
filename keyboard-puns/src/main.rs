@@ -66,6 +66,21 @@ fn valid_convert_from_dvorak(word: &[u8]) -> bool {
   true
 }
 
+fn spawn_printer(spool: mpsc::Receiver<String>) -> thread::JoinHandle<()> {
+  thread::spawn(move || {
+    let stdout = io::stdout();
+    let mut handle = stdout.lock();
+    loop {
+      let res = spool.recv().or(Err(()))
+        .and_then(|s| writeln!(handle, "{}", s).or(Err(())));
+      match res {
+        Ok(_) => (),
+        Err(_) => break,
+      };
+    };
+  })
+}
+
 fn run(spool: mpsc::Sender<String>) {
   let words = read_words(io::stdin().lock());
   let qwerty_words = words.iter()
@@ -90,20 +105,7 @@ fn run(spool: mpsc::Sender<String>) {
 
 fn main() {
   let (spool_tx, spool_rx) = mpsc::channel::<String>();
-
-  let printer = thread::spawn(move || {
-    let stdout = io::stdout();
-    let mut handle = stdout.lock();
-    loop {
-      let res = spool_rx.recv().or(Err(()))
-        .and_then(|s| writeln!(handle, "{}", s).or(Err(())));
-      match res {
-        Ok(_) => (),
-        Err(_) => break,
-      };
-    };
-  });
-
+  let printer = spawn_printer(spool_rx);
   run(spool_tx);
   printer.join().unwrap();
 }
