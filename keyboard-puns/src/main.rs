@@ -32,7 +32,7 @@ static QWERTY_TO_DVORAK: [u8; 123] = [
 
 fn read_words() -> Vec<String> {
   let stdin = io::stdin();
-  let mut words: Vec<String> = Vec::with_capacity(100_000);
+  let mut words: Vec<String> = Vec::with_capacity(1_000_000);
   for line in stdin.lock().lines() {
     words.push(line.unwrap().to_ascii_lowercase());
   };
