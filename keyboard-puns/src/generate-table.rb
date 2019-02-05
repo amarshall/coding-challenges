@@ -7,7 +7,7 @@ mapping = {
   'C' => 'J',
   'D' => 'E',
   'E' => '.',
-  'F' => 'Y',
+  'F' => 'U',
   'G' => 'I',
   'H' => 'D',
   'I' => 'C',
@@ -25,7 +25,7 @@ mapping = {
   'U' => 'G',
   'V' => 'K',
   'W' => ',',
-  'X' => 'J',
+  'X' => 'Q',
   'Y' => 'F',
   'Z' => ';',
 }.freeze
@@ -35,7 +35,7 @@ xs = mapping.reject do |k, v|
 end.flat_map do |k, v|
   [[k.upcase, v.upcase], [k.downcase, v.downcase]]
 end.map do |k, v|
-  [k.codepoints.first, v.codepoints.first]
+  [k.codepoints.first, "b'#{v}'"]
 end.each_with_object([]) do |(i, v), xs|
   xs[i] = v
 end
