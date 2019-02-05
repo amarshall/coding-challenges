@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 use std::io;
 use std::io::prelude::*;
+use std::str;
+use std::sync::mpsc;
+use std::thread;
 
 static QWERTY_TO_DVORAK: [u8; 123] = [
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -26,37 +29,76 @@ static QWERTY_TO_DVORAK: [u8; 123] = [
 ];
 
 
-fn read_words() -> HashSet<String> {
+fn read_words() -> Vec<String> {
   let stdin = io::stdin();
-  let mut words: HashSet<String> = HashSet::new();
+  let mut words: Vec<String> = Vec::with_capacity(100_000);
   for line in stdin.lock().lines() {
-    words.insert(line.unwrap());
+    words.push(line.unwrap().to_ascii_lowercase());
   };
   words
 }
 
-fn transform(input: String) -> Option<String> {
-  let mut output: Vec<u8> = Vec::with_capacity(input.len());
-  for byte in input.into_bytes() {
-    if byte == 0 {
-      return None
-    }
-    output.push(QWERTY_TO_DVORAK[byte as usize])
+fn transform(word: &[u8]) -> Vec<u8> {
+  let mut output: Vec<u8> = Vec::with_capacity(word.len());
+  for byte in word {
+    let dvorak_char = QWERTY_TO_DVORAK[*byte as usize];
+    output.push(dvorak_char)
   }
-  Some(String::from_utf8(output).unwrap())
+  output
+}
+
+fn valid_convert_from_qwerty(word: &[u8]) -> bool {
+  for chr in word {
+    if QWERTY_TO_DVORAK[*chr as usize] == 0 {
+      return false;
+    }
+  }
+  true
+}
+
+fn valid_convert_from_dvorak(word: &[u8]) -> bool {
+  for chr in word {
+    if *chr == b's' || *chr == b'v' || *chr == b'w' || *chr == b'z' {
+      return false;
+    }
+  }
+  true
+}
+
+fn run(spool: mpsc::Sender<String>) {
+  let words = read_words();
+  let qwerty_words = words.iter()
+    .map(|word| word.as_bytes())
+    .filter(|word| valid_convert_from_qwerty(word));
+  let dvorak_words: HashSet<&[u8]> = words.iter()
+    .map(|word| word.as_bytes())
+    .filter(|word| valid_convert_from_dvorak(word))
+    .collect();
+
+  for word in qwerty_words {
+    let pun = transform(word);
+    if dvorak_words.contains(&*pun) {
+      let s = format!("{} -> {}", str::from_utf8(word).unwrap(), String::from_utf8(pun).unwrap());
+      match spool.send(s) {
+        Ok(_) => (),
+        Err(_) => break,
+      };
+    }
+  };
 }
 
 fn main() {
-  let words = read_words();
-  for word in words.iter() {
-    let pun = transform(word.to_owned());
-    match pun {
-      Some(pun_word) => {
-        if words.contains(&pun_word) {
-          println!("{} -> {}", word, pun_word)
-        }
-      }
-      None => {}
+  let (spool_tx, spool_rx) = mpsc::channel::<String>();
+
+  let printer = thread::spawn(move || {
+    loop {
+      match spool_rx.recv() {
+        Ok(s) => println!("{}", s),
+        Err(_) => break,
+      };
     };
-  };
+  });
+
+  run(spool_tx);
+  printer.join().unwrap();
 }
