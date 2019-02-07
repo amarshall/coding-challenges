@@ -1,11 +1,16 @@
 use std::collections::HashSet;
+use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::io::Write;
 use std::str;
 use std::sync::mpsc;
+use std::sync::Arc;
 use std::thread;
 
+use crossbeam::scope;
+
+static CHUNKS: usize = 20;
 static QWERTY_TO_DVORAK: [u8; 123] = [
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -31,7 +36,7 @@ static QWERTY_TO_DVORAK: [u8; 123] = [
 
 
 fn read_words<T>(handle: T) -> Vec<String> where T: BufRead {
-  let mut words: Vec<String> = Vec::with_capacity(1_000_000);
+  let mut words: Vec<String> = Vec::new();
   for line in handle.lines() {
     words.push(line.unwrap());
   };
@@ -49,7 +54,7 @@ fn transform(word: &[u8]) -> Vec<u8> {
 
 fn valid_convert_from_qwerty(word: &[u8]) -> bool {
   for chr in word {
-    if QWERTY_TO_DVORAK[chr.to_ascii_lowercase() as usize] == 0 {
+    if QWERTY_TO_DVORAK[*chr as usize] == 0 {
       return false;
     }
   }
@@ -66,13 +71,13 @@ fn valid_convert_from_dvorak(word: &[u8]) -> bool {
   true
 }
 
-fn spawn_printer(spool: mpsc::Receiver<String>) -> thread::JoinHandle<()> {
+fn spawn_printer(spool: mpsc::Receiver<(String, String)>) -> thread::JoinHandle<()> {
   thread::spawn(move || {
     let stdout = io::stdout();
     let mut handle = stdout.lock();
     loop {
       let res = spool.recv().or(Err(()))
-        .and_then(|s| writeln!(handle, "{}", s).or(Err(())));
+        .and_then(|s| writeln!(handle, "{} -> {}", s.0, s.1).or(Err(())));
       match res {
         Ok(_) => (),
         Err(_) => break,
@@ -81,21 +86,12 @@ fn spawn_printer(spool: mpsc::Receiver<String>) -> thread::JoinHandle<()> {
   })
 }
 
-fn run(spool: mpsc::Sender<String>) {
-  let words = read_words(io::stdin().lock());
-  let qwerty_words = words.iter()
-    .map(|word| word.as_bytes())
-    .filter(|word| valid_convert_from_qwerty(word));
-  let dvorak_words: HashSet<&[u8]> = words.iter()
-    .map(|word| word.as_bytes())
-    .filter(|word| valid_convert_from_dvorak(word))
-    .collect();
-
+fn run_worker(qwerty_words: &[&[u8]], dvorak_words: &HashSet<&[u8]>, spool: mpsc::Sender<(String, String)>) {
   for word in qwerty_words {
     let pun = transform(word);
     if dvorak_words.contains(&*pun) {
-      let s = format!("{} -> {}", str::from_utf8(word).unwrap(), String::from_utf8(pun).unwrap());
-      match spool.send(s) {
+      let msg = (str::from_utf8(word).unwrap().to_string(), String::from_utf8(pun).unwrap());
+      match spool.send(msg) {
         Ok(_) => (),
         Err(_) => break,
       };
@@ -103,8 +99,31 @@ fn run(spool: mpsc::Sender<String>) {
   };
 }
 
+fn run(spool: mpsc::Sender<(String, String)>) {
+  let file = File::open("/usr/share/dict/words").unwrap();
+  let words = read_words(io::BufReader::new(file));
+  let qwerty_words: Vec<&[u8]> = words.iter()
+    .map(|word| word.as_bytes())
+    .filter(|word| valid_convert_from_qwerty(word))
+    .collect();
+  let dvorak_words: Arc<HashSet<&[u8]>> = Arc::new(words.iter()
+    .map(|word| word.as_bytes())
+    .filter(|word| valid_convert_from_dvorak(word))
+    .collect());
+
+  let chunks = qwerty_words.chunks(qwerty_words.len() / CHUNKS);
+
+  scope(|s| {
+    for chunk in chunks {
+      let spool2 = spool.clone();
+      let dvorak_words2 = dvorak_words.clone();
+      s.spawn(move |_| { run_worker(&chunk, &dvorak_words2, spool2); });
+    }
+  }).unwrap();
+}
+
 fn main() {
-  let (spool_tx, spool_rx) = mpsc::channel::<String>();
+  let (spool_tx, spool_rx) = mpsc::channel::<(String, String)>();
   let printer = spawn_printer(spool_rx);
   run(spool_tx);
   printer.join().unwrap();
