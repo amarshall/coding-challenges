@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
@@ -9,6 +8,7 @@ use std::sync::Arc;
 use std::thread;
 
 use crossbeam::scope;
+use hashbrown::HashSet;
 
 static CHUNKS: usize = 20;
 static QWERTY_TO_DVORAK: [u8; 123] = [
